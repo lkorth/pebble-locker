@@ -67,28 +67,18 @@ public class Locker {
 		if (isActiveAdmin()) {
 			if (mPrefs.getBoolean("key_enable_locker", false)) {
 				if(connectedToDeviceOrWifi()) {
-					if(isDeviceOnLockscreen()) {
-						mPrefs.edit().putBoolean(ConnectionReceiver.UNLOCK, true).commit();
-						mLogger.log(mUniq, "Screen is on lockscreen, setting unlock true for future unlock");
-					} else {
-						boolean passwordChanged = false;
-						
-						try {
-							passwordChanged = mDPM.resetPassword("", DevicePolicyManager.RESET_PASSWORD_REQUIRE_ENTRY);
-							
-							mPrefs.edit().putBoolean(ConnectionReceiver.LOCKED, false).commit();
-						} catch (IllegalArgumentException e) {
-							boolean passwordReset = mDPM.resetPassword(mPrefs.getString("key_password", ""), DevicePolicyManager.RESET_PASSWORD_REQUIRE_ENTRY);
-							mPrefs.edit().putBoolean(ConnectionReceiver.LOCKED, true).commit();
-							
-							mLogger.log(mUniq, "There was an exception when setting the password to blank, setting it back. Successfully reset: " 
-									+ passwordReset + " " + Log.getStackTraceString(e));
-						}
-						
-						mPrefs.edit().putBoolean(ConnectionReceiver.UNLOCK, false).commit();
-						
-						mLogger.log(mUniq, "Sucessfully unlocked: " + passwordChanged);	
+					try {
+						mDPM.resetPassword("", DevicePolicyManager.RESET_PASSWORD_REQUIRE_ENTRY);
+					} catch (IllegalArgumentException e) {
+						// This gets raised when device is encrypted on Android 4.4, but the screen password change is still successful
+						mLogger.log(mUniq, "Ignored exception when resetting password to blank: " + Log.getStackTraceString(e));
 					}
+					mPrefs.edit()
+						.putBoolean(ConnectionReceiver.LOCKED, false)
+						.putBoolean(ConnectionReceiver.UNLOCK, false)
+						.commit();
+
+					mLogger.log(mUniq, "Unlocked!");
 				}
 			} else {
 				mLogger.log(mUniq, "key_enable_locker is false");
@@ -96,15 +86,6 @@ public class Locker {
 		} else {
 			mLogger.log(mUniq, "Not an active admin");
 		}
-	}
-	
-	public boolean isDeviceOnLockscreen() {
-		boolean keyguard = ((KeyguardManager) mContext.getSystemService(Context.KEYGUARD_SERVICE)).inKeyguardRestrictedInputMode();
-		boolean screen = ((PowerManager) mContext.getSystemService(Context.POWER_SERVICE)).isScreenOn();
-		
-		mLogger.log(mUniq, "Keyguard is showing: " + keyguard + " Screen is on: " + screen);
-		
-		return keyguard && screen;
 	}
 	
 	private boolean connectedToDeviceOrWifi() {		
